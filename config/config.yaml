@@ -1,0 +1,72 @@
+# config/columns.yaml
+
+path_data:      ../datas/serre_u5_climat_all.csv
+path_fold:      ../outputs/splits_info.csv
+path_xps:       ../outputs/xps_results.json
+
+target:    tempint   # humedadint
+time_col:  timestamp
+# TODO :  reformuler la cible (souvent très efficace)
+# Plutôt que prédire tempint directement, 
+# prédis l'écart à la baseline : tempint_t − tempint_{t-24} 
+# (apprentissage du résidu). C'est plus facile à apprendre 
+# et tu garantis de battre naive_24h. Tu rajoutes 
+# la valeur 24h avant à la fin.
+
+lags:             [24, 48] # TODO : lag_168h (7j)
+rolling_windows:  [24, 48]
+test_horizon:      24
+eval_startdate:   "2025-01-01"
+
+feature_patterns:
+  - _sin
+  - _cos
+  - _lag
+  - _roll
+
+# Modèles à évaluer (déclaratif — reconstruits par src/model_factory.py)
+# type: baseline | sklearn   ; steps = pipeline appliqué après StandardScaler
+models:
+  naive_24h:
+    type: baseline
+    horizon: 24
+
+  river:
+    type: river
+    params: {lr: 0.01, l2: 0.0, optimizer: adam}
+
+  river_sgd:
+    type: river
+    params: {lr: 0.001, l2: 0.01, optimizer: sgd}
+    # params: {lr: 0.05, l2: 0.001, optimizer: sgd}  # explose
+
+  LinearRegression:
+    type: sklearn
+    steps:
+      - {cls: LinearRegression}
+
+  Lasso:
+    type: sklearn
+    steps:
+      - {cls: Lasso, params: {alpha: 0.01}}
+
+  Ridge:
+    type: sklearn
+    steps:
+      - {cls: Ridge, params: {alpha: 1.0}}
+
+  Ridge_Poly2:
+    type: sklearn
+    steps:
+      - {cls: PolynomialFeatures, params: {degree: 2, interaction_only: true}}
+      - {cls: Ridge, params: {alpha: 1.0}}
+
+  RandomForest:
+    type: tree
+    steps:
+      - {cls: RandomForestRegressor, params: {n_estimators: 100, max_depth: 15, random_state: 42, n_jobs: -1}}
+
+  LightGBM:  # TODO : tunning
+    type: tree
+    steps:
+      - {cls: LGBMRegressor, params: {n_estimators: 200, learning_rate: 0.05, verbose: -1}}
