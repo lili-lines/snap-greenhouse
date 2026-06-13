@@ -2,10 +2,9 @@
 Generate a GIF comparing ONE batch model vs ONE online (river) model,
 fold by fold, for the project README.
 
-Each frame = one test window (24 h): real temperature vs both models'
+Each frame = one test window (<=24 h): real temperature vs both models'
 predictions, plus the per-fold MAE of each model. Playing through the folds
-shows how the online model adapts over the seasons while the (frozen) batch
-model drifts.
+shows how each model behaves across the seasons.
 
 Output : results/figures/batch_vs_river.gif
 Run    : python results/make_comparison_gif.py
@@ -39,7 +38,10 @@ BATCH_MODEL = "Ridge_Poly2"   # editable: any batch model present in the journal
 RIVER_MODEL = "river"         # editable: any online (river) run
 OUT_PATH    = ROOT / "results" / "figures" / "batch_vs_river.gif"
 FPS         = 1.5             # frames per second (lower = slower playback)
-DPI         = 90             # lower = lighter GIF
+DPI         = 90              # lower = lighter GIF
+
+# modern palette (shared with make_drift_gif.py for a coherent README look)
+C_REAL, C_BATCH, C_ONLINE = "#212529", "#3a86ff", "#ff006e"
 # ====================================================================
 
 
@@ -72,34 +74,49 @@ def main():
         raise SystemExit("No fold shared by the two models in the journal.")
 
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    fig, ax = plt.subplots(figsize=(9, 4.5))
+    fig, ax = plt.subplots(figsize=(9.5, 4.8))
 
     def draw(i):
         ax.clear()
+        ax.set_facecolor("#fbfbfe")
+        for s in ax.spines.values():
+            s.set_edgecolor("#dfe3e8")
+
         s = splits[i]
         b, r = fb[s], fr[s]
-        ax.plot(np.arange(len(b["y_test"])), b["y_test"],
-                color="black", lw=2.2, label="real")
-        ax.plot(np.arange(len(b["y_pred"])), b["y_pred"],
-                color="steelblue", lw=1.6, ls="--", label=f"{BATCH_MODEL} (batch)")
-        ax.plot(np.arange(len(r["y_pred"])), r["y_pred"],
-                color="tomato", lw=1.6, ls="--", label=f"{RIVER_MODEL} (online)")
+        xb, xr = np.arange(len(b["y_test"])), np.arange(len(r["y_pred"]))
+        ax.plot(xb, b["y_test"], color=C_REAL,   lw=2.4, alpha=0.9,  label="real  (tempint, °C)")
+        ax.plot(xb, b["y_pred"], color=C_BATCH,  lw=1.9, ls="--", alpha=0.95, label=f"{BATCH_MODEL}  (batch)")
+        ax.plot(xr, r["y_pred"], color=C_ONLINE, lw=1.9, ls="--", alpha=0.95, label=f"{RIVER_MODEL}  (online)")
+        # faint error fill of the online model vs its own real
+        ax.fill_between(xr, r["y_pred"], r["y_test"], color=C_ONLINE, alpha=0.06)
 
         mae_b = np.mean(np.abs(b["y_pred"] - b["y_test"]))
         mae_r = np.mean(np.abs(r["y_pred"] - r["y_test"]))
-        # auto y-axis per fold: each 24 h window is framed on its own values
+
+        # auto y-axis per fold: each window is framed on its own values
         vals = np.concatenate([b["y_test"], b["y_pred"], r["y_pred"]])
-        pad = 0.08 * (vals.max() - vals.min() + 1e-9)
+        pad = 0.10 * (vals.max() - vals.min() + 1e-9)
         ax.set_ylim(vals.min() - pad, vals.max() + pad)
-        ax.set_xlabel("hour within the 24 h test window")
-        ax.set_ylabel("temperature (degC)")
-        ax.set_title(f"Fold {i + 1}/{len(splits)}  -  {b['label']}")
-        ax.text(0.02, 0.96,
-                f"MAE batch  = {mae_b:5.2f}\nMAE online = {mae_r:5.2f}",
-                transform=ax.transAxes, va="top", fontsize=10, family="monospace",
-                bbox=dict(boxstyle="round", fc="white", ec="0.7", alpha=0.9))
-        ax.legend(loc="upper right", fontsize=9)
-        ax.grid(alpha=0.25)
+        ax.set_xlabel("hour within the test window")
+        ax.set_ylabel("temperature (°C)")
+        ax.set_title(f"Fold {i + 1}/{len(splits)}   ·   {b['label']}", fontsize=11, fontweight="bold")
+        ax.grid(alpha=0.18)
+        ax.legend(loc="lower center", fontsize=8.5, framealpha=0.85, ncol=3)
+
+        # per-fold MAE scoreboard (winner in bold)
+        win_b = mae_b <= mae_r
+        ax.text(0.025, 0.95, f"MAE batch   {mae_b:4.2f} °C", transform=ax.transAxes,
+                color=C_BATCH, va="top", family="monospace", fontsize=9.5,
+                fontweight="bold" if win_b else "normal")
+        ax.text(0.025, 0.86, f"MAE online  {mae_r:4.2f} °C", transform=ax.transAxes,
+                color=C_ONLINE, va="top", family="monospace", fontsize=9.5,
+                fontweight="bold" if not win_b else "normal")
+        # data / models info box
+        ax.text(0.985, 0.95,
+                f"Target: tempint (indoor °C)\nbatch={BATCH_MODEL} · online={RIVER_MODEL}",
+                transform=ax.transAxes, va="top", ha="right", fontsize=8,
+                bbox=dict(boxstyle="round,pad=0.4", fc="white", ec="#ced4da", alpha=0.9))
 
     anim = FuncAnimation(fig, draw, frames=len(splits), interval=1000 / FPS)
     anim.save(OUT_PATH, writer=PillowWriter(fps=FPS), dpi=DPI)

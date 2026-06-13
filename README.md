@@ -6,6 +6,12 @@
 ![LightGBM](https://img.shields.io/badge/LightGBM-gradient%20boosting-green)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
+<p align="center">
+  <img src="plan_greenhouse.jpg" alt="Greenhouse U5 layout" width="40%">
+  &nbsp;&nbsp;
+  <img src="viz_sensor.jpg" alt="Sensor data visualization" width="40%">
+</p>
+
 Forecasting the **indoor temperature** (`tempint`) of a connected greenhouse (IoT, unit **U5**)
 from sensor data. The goal: **optimize energy management** (heating, ventilation) by
 anticipating thermal drift. The project **compares two inference paradigms** — **Batch** (lot-based
@@ -70,9 +76,9 @@ flowchart LR
 ## 🗂️ Project layout
 
 ```
-online ML test lina/
+snap_greenhouse/
 ├── config/config.yaml         # spec
-├── datas/                     # sensor + external weather data (CSV)
+├── datas/                     # hide : sensor + external weather data (CSV)
 ├── notebooks/                 # xps + viz
 ├── src/                       # source code
 │   ├── config.py              # loads config.yaml
@@ -87,7 +93,7 @@ online ML test lina/
 │   ├── results.py             # comparison table
 │   ├── plots.py               # viz
 │   └── runner.py              # orchestration of all models
-├── outputs/                   # run journal + per-fold detail
+├── outputs/                   # hide : run journal + per-fold detail
 ├── results/                   # gifs + scripts
 ├── requirements-notebook.txt
 └── README.md
