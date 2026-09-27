@@ -6,7 +6,7 @@ from src.cv import split_fold
 from src.preprocess import prepare_raw, GreenhousePipeline
 from src.journal import log_run
 from src.metrics import compute_metrics
-from src.river_model import build_model, train_online, predict_fold, _to_features, _add_lags
+from src.river_model import build_model, train_online, predict_and_learn_fold, _to_features, _add_lags
 
 target   = cfg['target']
 time_col = cfg['time_col']
@@ -119,14 +119,24 @@ def evaluate_river(splits_info: pd.DataFrame,
                    log: bool = True) -> pd.DataFrame:
     """
     evaluate River (online) model fold by fold
+    🌊 the model is now a single instance kept across all folds (in
+    chronological order) instead of being rebuilt from scratch each time:
+    that's what makes it genuinely "online" rather than a batch model
+    retrained every fold. Between folds, it only catches up on the slice
+    of history it hasn't seen yet (no replay of already-learned rows).
     """
     df_raw = prepare_raw(df_raw, time_col)
+    splits_info = splits_info.sort_values("Split")  # 🌊 folds must be walked in chronological order
+    model = build_model(**(model_kwargs or {}))
+    trained_until = {"ts": None}
 
     def per_fold(row):
         df_train, df_test = split_fold(df_raw, row, time_col)
-        model = build_model(**(model_kwargs or {}))
-        train_online(model, df_train)
-        y_pred = predict_fold(model, df_test, df_train)
+        # 🌊 lags computed on the full df_train (correct context), but only
+        # learn on rows not already seen in a previous fold (no replay)
+        train_online(model, df_train, since=trained_until["ts"])
+        y_pred = predict_and_learn_fold(model, df_test, df_train)
+        trained_until["ts"] = df_test[time_col].max()
         return df_test[target].values, y_pred, df_test[time_col].values
 
     return evaluate_folds(

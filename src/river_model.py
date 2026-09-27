@@ -65,28 +65,39 @@ def _add_lags(df: pd.DataFrame) -> pd.DataFrame:
     return df.dropna(subset=[f"{target}_lag_{max(lags)}h"])
 
 
-def train_online(model, df: pd.DataFrame):
+def train_online(model, df: pd.DataFrame, since=None):
     """
     train row by row on df
+    🌊 `since`: only learn on rows strictly after this timestamp — lags/rolling
+    are still computed on the full `df` (correct context), only the learning
+    step is restricted, so incremental calls don't need a 48h context prefix.
     """
-    for _, row in _add_lags(df).iterrows():
-        model.learn_one(_to_features(row), 
+    rows = _add_lags(df)
+    if since is not None:
+        rows = rows[rows[time_col] > since]
+    for _, row in rows.iterrows():
+        model.learn_one(_to_features(row),
                         row[target])
     return model
 
 
-def predict_fold(model, 
-                 df_test: pd.DataFrame, 
-                 df_train: pd.DataFrame) -> np.ndarray:
+def predict_and_learn_fold(model,
+                           df_test: pd.DataFrame,
+                           df_train: pd.DataFrame) -> np.ndarray:
     """
     pred on df_test with train context for lags
+    🌊 true online loop: predict_one then learn_one on the ground truth,
+    right after each prediction, so the model keeps adapting during the
+    test window instead of staying frozen like a batch model.
     """
-    context = pd.concat([df_train.tail(48), 
+    context = pd.concat([df_train.tail(48),
                          df_test]).reset_index(drop=True)
     context  = _add_lags(context)
     df_test_with_lags = context.tail(len(df_test))
 
     preds = []
     for _, row in df_test_with_lags.iterrows():
-        preds.append(model.predict_one(_to_features(row)))
+        x = _to_features(row)
+        preds.append(model.predict_one(x))
+        model.learn_one(x, row[target])  # 🌊 learn immediately after predicting (no leakage: prediction already made)
     return np.array(preds)

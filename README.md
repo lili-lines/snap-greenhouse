@@ -13,7 +13,7 @@
 </p>
 
 🚧 todo:
-. data origin: sensor collection
+. data origin expl: sensor collection
 
 The goal is to optimize energy management (heating, ventilation) by anticipating thermal drift, by forecasting the indoor temperature (`tempint`) of a connected greenhouse U5 from sensor data. To do this, we compare different ways of predicting temperature and humidity — this first version focuses on temperature only. The project compares two inference paradigms: Batch, lot-based forecasting, and Online, learning on the fly on real data.
 
@@ -41,8 +41,6 @@ Objective: compare the two approaches for forecasting `tempint`:
 - Online — updated on each new sensor reading, predict → learn
 
 The trade-off: online is generally less accurate than batch on a stable regime, but more robust over the long run in a living environment.
-
-Data explication: 🚧 todo
 
 ### Methodology
 
@@ -141,9 +139,9 @@ target:    tempint
 
 ### Batch vs Online
 
-| Criterion | Batch `Ridge_Poly2` | Online `River` |
+| Criterion | Batch `Ridge_Poly2` | Online `River` (`river_sgd`) |
 |---|---|---|
-| Global MAE (°C) | **≈ 1.9** | **≈ 3.4** |
+| Global MAE (°C) | **≈ 1.9** | **≈ 2.3** |
 | Drift adaptation | ❌ frozen between retrainings | ✅ continuous |
 | Inference latency | per lot | - |
 | Model update | full retraining | incremental 1 sample |
@@ -154,15 +152,20 @@ target:    tempint
 
 | Model | Type | MAE (°C) | RMSE (°C) | R² | vs baseline |
 |---|---|---:|---:|---:|---:|
-| Ridge_Poly2 | batch | **1.89** | 2.59 | **0.958** | −3 % |
-| naive_24h | baseline | 1.95 | 2.82 | 0.697 | — |
-| LightGBM | batch | 2.19 | 3.17 | 0.936 | +13 % |
-| Lasso | batch | 2.90 | 3.98 | 0.899 | +49 % |
-| LinearRegression | batch | 2.98 | 3.98 | 0.899 | +53 % |
-| river | online | 3.44 | 4.78 | 0.854 | +77 % |
+| Ridge_Poly2 | batch | **1.89** | 2.59 | **0.958** | −32.3 % |
+| LightGBM | batch | 2.17 | 3.13 | 0.938 | −22.2 % |
+| river_sgd | online | 2.32 | 3.10 | 0.939 | −17.1 % |
+| RandomForest | batch | 2.36 | 3.41 | 0.926 | −15.5 % |
+| river | online | 2.45 | 3.24 | 0.933 | −12.4 % |
+| naive_24h | baseline | 2.79 | 4.51 | 0.870 | — |
+| Lasso | batch | 2.90 | 3.98 | 0.899 | +3.7 % |
+| Ridge | batch | 2.97 | 3.98 | 0.900 | +6.5 % |
+| LinearRegression | batch | 2.98 | 3.98 | 0.899 | +6.6 % |
 
 ⚠️ **R² pitfall**: do not average the R² per fold, low variance over 24 h → unstable R², sometimes negative. The table above recomputes each metric on concatenated predictions across all folds <br>
 script: `src/results.py > global_metrics`
+
+🌊 **River fix**: the model never learned during the test window (frozen, like a batch model). Fixed to keep learning (`predict_one` → `learn_one`) throughout — MAE dropped from ≈ 3.44 to ≈ 2.32.
 
 ## 4. Roadmap
 
